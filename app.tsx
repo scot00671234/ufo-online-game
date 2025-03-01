@@ -1,14 +1,23 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import * as THREE from 'three';
 
 const SpaceShooter = () => {
-  const mountRef = useRef(null);
+  const mountRef = useRef<HTMLDivElement>(null);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
 
   useEffect(() => {
-    let ship, bullets = [], asteroids = [], stars = [];
+    if (!mountRef.current) return;
+    
+    let ship: THREE.Group;
+    const bullets: Array<THREE.Group & { velocity: THREE.Vector3 }> = [];
+    const asteroids: Array<THREE.Mesh & { 
+      rotationSpeed: { x: number; y: number; z: number };
+      velocity: { x: number; y: number; z: number };
+      radius: number;
+    }> = [];
+    const stars: THREE.Mesh[] = [];
     
     // Procedural texture generation
     function createNoiseTexture(size = 256) {
@@ -16,6 +25,8 @@ const SpaceShooter = () => {
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return new THREE.Texture();
+      
       const imageData = ctx.createImageData(size, size);
       
       for (let i = 0; i < imageData.data.length; i += 4) {
@@ -31,11 +42,12 @@ const SpaceShooter = () => {
     }
     
     // Create planet surface texture
-    function createPlanetTexture(baseColor, noiseScale = 0.5) {
+    function createPlanetTexture(baseColor: number, noiseScale = 0.5) {
       const canvas = document.createElement('canvas');
       canvas.width = 512;
       canvas.height = 256;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return new THREE.Texture();
       
       // Convert hex color to RGB
       const r = (baseColor >> 16) & 255;
@@ -124,7 +136,7 @@ const SpaceShooter = () => {
     const skybox = new THREE.Mesh(skyboxGeometry, skyboxMaterial);
     scene.add(skybox);
     // Create nebula effect
-    function createNebula(color, position, scale) {
+    function createNebula(color: number, position: THREE.Vector3, scale: number) {
       const nebulaGroup = new THREE.Group();
       
       // Create multiple layers for more complex appearance
@@ -173,10 +185,6 @@ const SpaceShooter = () => {
       nebulaGroup.position.copy(position);
       scene.add(nebulaGroup);
       return nebulaGroup;
-      const nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
-      nebula.position.copy(position);
-      scene.add(nebula);
-      return nebula;
     }
     // Stars background with different sizes
     function createStar() {
@@ -199,7 +207,7 @@ const SpaceShooter = () => {
       scene.add(star);
     }
     // Enhanced planet creation with textures and features
-    function createPlanet(radius, color, distance, hasRings = false, hasClouds = false) {
+    function createPlanet(radius: number, color: number, distance: number, hasRings = false, hasClouds = false) {
       const planetGeometry = new THREE.SphereGeometry(radius, 64, 64);
       const planetTexture = createPlanetTexture(color, 0.3);
       const bumpTexture = createNoiseTexture();
@@ -280,9 +288,9 @@ const SpaceShooter = () => {
       createNebula(0xff8800, new THREE.Vector3(800, -400, -2500), 350)  // Orange nebula
     ];
     // Create AI spaceships
-    const aiShips = [];
-    function createAISpaceship(position) {
-      const aiShip = new THREE.Group();
+    const aiShips: Array<THREE.Group & { velocity: THREE.Vector3 }> = [];
+    function createAISpaceship(position: THREE.Vector3) {
+      const aiShip = new THREE.Group() as THREE.Group & { velocity: THREE.Vector3 };
       
       // Main body
       const bodyGeometry = new THREE.ConeGeometry(0.5, 2, 8);
@@ -338,7 +346,7 @@ const SpaceShooter = () => {
       const speedMultiplier = 1 + Math.floor(score / 1000) * 0.2;
       
       // Create bullet geometry with trail effect
-      const bulletGroup = new THREE.Group();
+      const bulletGroup = new THREE.Group() as THREE.Group & { velocity: THREE.Vector3 };
       
       // Main bullet
       const bulletGeometry = new THREE.SphereGeometry(0.15, 8, 8);
@@ -368,7 +376,11 @@ const SpaceShooter = () => {
         color: 0x808080,
         wireframe: true // Gives a cool space rock effect
       });
-      const asteroid = new THREE.Mesh(geometry, material);
+      const asteroid = new THREE.Mesh(geometry, material) as THREE.Mesh & { 
+        rotationSpeed: { x: number; y: number; z: number };
+        velocity: { x: number; y: number; z: number };
+        radius: number;
+      };
       
       // Random position at top of screen
       asteroid.position.set(
@@ -396,7 +408,7 @@ const SpaceShooter = () => {
     }
 
     // Controls
-    const keys = {};
+    const keys: Record<string, boolean> = {};
     document.addEventListener('keydown', (e) => keys[e.key] = true);
     document.addEventListener('keyup', (e) => keys[e.key] = false);
     document.addEventListener('keypress', (e) => {
@@ -405,7 +417,7 @@ const SpaceShooter = () => {
 
     // Game loop
     let lastAsteroidSpawn = 0;
-    function animate(time) {
+    function animate(time: number) {
       requestAnimationFrame(animate);
 
       const baseSpeed = 2;
@@ -458,13 +470,14 @@ const SpaceShooter = () => {
       camera.lookAt(ship.position);
 
       // Move bullets
-      bullets.forEach((bullet, bulletIndex) => {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
         bullet.position.add(bullet.velocity);
         if(bullet.position.z < -50) {
           scene.remove(bullet);
-          bullets.splice(bulletIndex, 1);
+          bullets.splice(i, 1);
         }
-      });
+      }
 
       if (!gameOver) {
         // Spawn asteroids with increasing frequency based on score
@@ -473,8 +486,10 @@ const SpaceShooter = () => {
           createAsteroid();
           lastAsteroidSpawn = time;
         }
+        
         // Move and rotate asteroids
-        asteroids.forEach((asteroid, asteroidIndex) => {
+        for (let i = asteroids.length - 1; i >= 0; i--) {
+          const asteroid = asteroids[i];
           asteroid.position.x += asteroid.velocity.x;
           asteroid.position.y += asteroid.velocity.y;
           asteroid.position.z += asteroid.velocity.z;
@@ -482,32 +497,39 @@ const SpaceShooter = () => {
           asteroid.rotation.x += asteroid.rotationSpeed.x;
           asteroid.rotation.y += asteroid.rotationSpeed.y;
           asteroid.rotation.z += asteroid.rotationSpeed.z;
+          
           // Check collision with bullets
-          bullets.forEach((bullet, bulletIndex) => {
+          for (let j = bullets.length - 1; j >= 0; j--) {
+            const bullet = bullets[j];
             if(asteroid.position.distanceTo(bullet.position) < asteroid.radius) {
               scene.remove(asteroid);
               scene.remove(bullet);
-              asteroids.splice(asteroidIndex, 1);
-              bullets.splice(bulletIndex, 1);
+              asteroids.splice(i, 1);
+              bullets.splice(j, 1);
               setScore(prev => prev + 100);
+              break;
             }
-          });
+          }
+          
+          // Check if asteroid still exists after bullet collision check
+          if (i >= asteroids.length) continue;
+          
           // Check collision with ship
           // Use a larger collision radius for the UFO
           const ufoCollisionRadius = 1.2; // Adjust this value as needed
           if(asteroid.position.distanceTo(ship.position) < asteroid.radius + ufoCollisionRadius) {
             setGameOver(true);
           }
+          
           // Remove asteroids that pass the ship
           if(asteroid.position.z > 5) {
             scene.remove(asteroid);
-            asteroids.splice(asteroidIndex, 1);
+            asteroids.splice(i, 1);
           }
-        });
+        }
       }
 
       // Update planets rotation
-      // Update planets
       planets.forEach((planet, index) => {
         planet.rotation.y += 0.001 * (index + 1);
         if (planet.children.length > 1) { // If planet has clouds
@@ -516,14 +538,14 @@ const SpaceShooter = () => {
       });
       
       // Update nebulae
-      nebulae.forEach((nebula, index) => {
+      nebulae.forEach((nebula) => {
         nebula.rotation.x += 0.0001;
         nebula.rotation.y += 0.0002;
         nebula.rotation.z += 0.0001;
       });
       
       // Update AI ships
-      aiShips.forEach((aiShip, index) => {
+      aiShips.forEach((aiShip) => {
         // Update position
         aiShip.position.add(aiShip.velocity);
         
@@ -550,10 +572,11 @@ const SpaceShooter = () => {
       const distanceFromOrigin = ship.position.length();
       if(distanceFromOrigin > 400) {
         // Remove distant stars and create new ones near the ship
-        stars.forEach((star, index) => {
+        for (let i = stars.length - 1; i >= 0; i--) {
+          const star = stars[i];
           if(star.position.distanceTo(ship.position) > 600) {
             scene.remove(star);
-            stars.splice(index, 1);
+            stars.splice(i, 1);
             
             // Create new star near the ship
             const newStar = new THREE.Mesh(
@@ -577,16 +600,16 @@ const SpaceShooter = () => {
             stars.push(newStar);
             scene.add(newStar);
           }
-        });
+        }
       }
 
       renderer.render(scene, camera);
     }
-    animate();
+    animate(0);
 
     // Cleanup
     return () => {
-      mountRef.current.removeChild(renderer.domElement);
+      mountRef.current?.removeChild(renderer.domElement);
       scene.clear();
       renderer.dispose();
     };
@@ -663,5 +686,7 @@ const App = () => {
 };
 
 const container = document.getElementById('renderDiv');
-const root = ReactDOM.createRoot(container);
-root.render(<App />);
+if (container) {
+  const root = ReactDOM.createRoot(container);
+  root.render(<App />);
+}
